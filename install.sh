@@ -42,6 +42,57 @@ dest_dir() {
     fi
 }
 
+# where the tab-completion files go. bash is always set up, zsh and fish
+# only if that shell is actually installed
+completion_path() {
+    local shell_name="$1"
+    if [ "$INSTALL_MODE" = "user" ]; then
+        case "$shell_name" in
+            bash) echo "${HOME}/.local/share/bash-completion/completions/${BIN_NAME}" ;;
+            zsh)  echo "${HOME}/.local/share/zsh/site-functions/_${BIN_NAME}" ;;
+            fish) echo "${HOME}/.config/fish/completions/${BIN_NAME}.fish" ;;
+        esac
+    else
+        case "$shell_name" in
+            bash) echo "/usr/share/bash-completion/completions/${BIN_NAME}" ;;
+            zsh)  echo "/usr/local/share/zsh/site-functions/_${BIN_NAME}" ;;
+            fish) echo "/usr/share/fish/vendor_completions.d/${BIN_NAME}.fish" ;;
+        esac
+    fi
+}
+
+install_completions() {
+    local shell_name completion_file
+    for shell_name in bash zsh fish; do
+        if [ "$shell_name" != "bash" ] && ! command -v "$shell_name" >/dev/null 2>&1; then
+            continue
+        fi
+        completion_file="$(completion_path "$shell_name")"
+        if [ "$INSTALL_MODE" = "user" ]; then
+            mkdir -p "$(dirname "$completion_file")"
+            "$BUILT_BIN" completions "$shell_name" > "$completion_file"
+        else
+            sudo mkdir -p "$(dirname "$completion_file")"
+            "$BUILT_BIN" completions "$shell_name" | sudo tee "$completion_file" >/dev/null
+        fi
+        log "Tab completion installed for $shell_name"
+    done
+}
+
+remove_completions() {
+    local shell_name completion_file
+    for shell_name in bash zsh fish; do
+        completion_file="$(completion_path "$shell_name")"
+        if [ -f "$completion_file" ]; then
+            if [ "$INSTALL_MODE" = "system" ]; then
+                sudo rm -f "$completion_file"
+            else
+                rm -f "$completion_file"
+            fi
+        fi
+    done
+}
+
 if [ "$UNINSTALL" = true ]; then
     target="$(dest_dir)/$BIN_NAME"
     if [ -f "$target" ]; then
@@ -54,6 +105,7 @@ if [ "$UNINSTALL" = true ]; then
     else
         warn "Nothing installed at $target"
     fi
+    remove_completions
     exit 0
 fi
 
@@ -95,6 +147,12 @@ else
     sudo cp "$BUILT_BIN" "${DEST}/${BIN_NAME}"
     sudo chmod 755 "${DEST}/${BIN_NAME}"
     log "Installed to ${DEST}/${BIN_NAME}"
+fi
+
+# 4. Tab completion (open a new terminal for it to kick in).
+install_completions
+if [ "$INSTALL_MODE" = "user" ] && command -v zsh >/dev/null 2>&1; then
+    warn "For zsh completion add this to ~/.zshrc: fpath=(~/.local/share/zsh/site-functions \$fpath)"
 fi
 
 log "Run 'yapt --help' to get started."
