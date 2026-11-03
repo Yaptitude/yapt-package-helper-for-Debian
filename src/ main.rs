@@ -259,7 +259,7 @@ impl Json {
         if let Json::Obj(fields) = self { Some(fields) } else { None }
     }
     fn get(&self, key: &str) -> Option<&Json> {
-        self.as_obj()?.iter().find(|(k, _)| k.as_str() == key).map(|(_, v)| v)
+        self.as_obj()?.iter().find(|(field_name, _)| field_name.as_str() == key).map(|(_, field_value)| field_value)
     }
 }
 
@@ -278,8 +278,8 @@ fn json_escape(s: &str) -> String {
     out
 }
 
-fn json_to_string(v: &Json, indent: usize) -> String {
-    match v {
+fn json_to_string(json_value: &Json, indent: usize) -> String {
+    match json_value {
         Json::Null => "null".to_string(),
         Json::Bool(b) => b.to_string(),
         Json::Str(s) => format!("\"{}\"", json_escape(s)),
@@ -1735,6 +1735,96 @@ fn cmd_self_update_cli(args: &[String]) {
     cmd_self_update(repo_path, noconfirm);
 }
 
+// -- tab completion --
+// `yapt completions bash|zsh|fish` prints a completion script. install.sh
+// drops these in the right place, so most people never run this by hand.
+
+const COMMANDS: &str = "install search info upgrade remove clean list self-update completions \
+    update autoremove purge show depends rdepends policy dist-upgrade source download changelog autoclean";
+const INSTALL_FLAGS: &str = "--build --flatpak --noconfirm -y --skip-deps --no-cache --build-dir";
+const REMOVE_FLAGS: &str = "--purge --purge-cache --noconfirm -y";
+const YES_FLAGS: &str = "--noconfirm -y";
+const SHELLS: &str = "bash zsh fish";
+
+const BASH_COMPLETION: &str = r#"# yapt bash completion
+_yapt() {
+    local current previous
+    current="${COMP_WORDS[COMP_CWORD]}"
+    previous="${COMP_WORDS[COMP_CWORD-1]}"
+
+    if [ "$COMP_CWORD" -eq 1 ]; then
+        COMPREPLY=( $(compgen -W "@COMMANDS@" -- "$current") )
+        return
+    fi
+
+    if [ "$previous" = "--build-dir" ]; then
+        COMPREPLY=( $(compgen -d -- "$current") )
+        return
+    fi
+
+    case "${COMP_WORDS[1]}" in
+        install)     COMPREPLY=( $(compgen -W "@INSTALL_FLAGS@" -- "$current") ) ;;
+        remove)      COMPREPLY=( $(compgen -W "@REMOVE_FLAGS@" -- "$current") ) ;;
+        upgrade|clean|self-update) COMPREPLY=( $(compgen -W "@YES_FLAGS@" -- "$current") ) ;;
+        completions) COMPREPLY=( $(compgen -W "@SHELLS@" -- "$current") ) ;;
+    esac
+}
+complete -F _yapt yapt
+"#;
+
+const ZSH_COMPLETION: &str = r#"#compdef yapt
+# yapt zsh completion
+_yapt() {
+    if (( CURRENT == 2 )); then
+        compadd -- @COMMANDS@
+        return
+    fi
+
+    if [[ ${words[CURRENT-1]} == --build-dir ]]; then
+        _files -/
+        return
+    fi
+
+    case ${words[2]} in
+        install)     compadd -- @INSTALL_FLAGS@ ;;
+        remove)      compadd -- @REMOVE_FLAGS@ ;;
+        upgrade|clean|self-update) compadd -- @YES_FLAGS@ ;;
+        completions) compadd -- @SHELLS@ ;;
+    esac
+}
+_yapt "$@"
+"#;
+
+const FISH_COMPLETION: &str = r#"# yapt fish completion
+complete -c yapt -f
+complete -c yapt -n '__fish_use_subcommand' -a '@COMMANDS@'
+complete -c yapt -n '__fish_seen_subcommand_from install' -a '@INSTALL_FLAGS@'
+complete -c yapt -n '__fish_seen_subcommand_from remove' -a '@REMOVE_FLAGS@'
+complete -c yapt -n '__fish_seen_subcommand_from upgrade clean self-update' -a '@YES_FLAGS@'
+complete -c yapt -n '__fish_seen_subcommand_from completions' -a '@SHELLS@'
+complete -c yapt -l build-dir -r -F
+"#;
+
+fn cmd_completions(args: &[String]) {
+    let shell = match args.first() {
+        Some(shell_name) => shell_name.as_str(),
+        None => die(&format!("Which shell? Try: yapt completions bash  (or: {})", SHELLS)),
+    };
+    let template = match shell {
+        "bash" => BASH_COMPLETION,
+        "zsh" => ZSH_COMPLETION,
+        "fish" => FISH_COMPLETION,
+        other => die(&format!("Unknown shell '{}'. Supported: {}", other, SHELLS)),
+    };
+    let script = template
+        .replace("@COMMANDS@", COMMANDS)
+        .replace("@INSTALL_FLAGS@", INSTALL_FLAGS)
+        .replace("@REMOVE_FLAGS@", REMOVE_FLAGS)
+        .replace("@YES_FLAGS@", YES_FLAGS)
+        .replace("@SHELLS@", SHELLS);
+    print!("{}", script);
+}
+
 fn print_help() {
     println!("yapt - a yay/paru-style package manager for Debian\n");
     println!("USAGE:");
@@ -1750,6 +1840,7 @@ fn print_help() {
     println!("  yapt list                 show yapt-tracked builds + installed flatpaks");
     println!("  yapt self-update [path]  rebuild + reinstall yapt itself (run from the");
     println!("                            yapt checkout, or pass its path)");
+    println!("  yapt completions <shell> print a tab-completion script (bash, zsh, fish)");
     println!("  yapt <apt-verb> ...      passthrough to apt-get (update, autoremove, ...)");
     println!("\nFlags:");
     println!("  --noconfirm, -y   skip confirmation prompts");
@@ -1786,6 +1877,7 @@ fn main() {
         "clean" => return cmd_clean_cli(&argv[1..]),
         "list" => return cmd_list(),
         "self-update" => return cmd_self_update_cli(&argv[1..]),
+        "completions" => return cmd_completions(&argv[1..]),
         _ => {}
     }
 
