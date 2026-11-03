@@ -77,8 +77,8 @@ You'll need Rust installed. If you don't have it, `install.sh` will offer
 to install it for you via [rustup](https://rustup.rs).
 
 ```bash
-git clone https://github.com/Yaptitude/yapt.git
-cd yapt
+git clone https://github.com/Yaptitude/yapt-package-helper-for-Debian.git
+cd yapt-package-helper-for-Debian
 chmod +x install.sh
 ./install.sh
 ```
@@ -120,7 +120,7 @@ With `./install.sh --user`, zsh needs this line in `~/.zshrc`:
 ## Project structure
 
 ```
-yapt/
+yapt-package-helper-for-Debian/
 ├── .gitignore
 ├── Cargo.toml
 ├── README.md
@@ -193,7 +193,7 @@ version strings.
 ## Updating yapt itself
 
 ```bash
-cd yapt              # your git checkout
+cd yapt-package-helper-for-Debian            # your git checkout
 yapt self-update
 ```
 
@@ -202,7 +202,7 @@ release mode, and reinstalls to `/usr/local/bin/yapt`. Must be run from
 inside the checkout, or pass the path explicitly:
 
 ```bash
-yapt self-update /path/to/yapt
+yapt self-update /path/to/yapt-package-helper-for-Debian
 ```
 
 ## Why not Snap or raw .deb downloads?
