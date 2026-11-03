@@ -1602,7 +1602,7 @@ fn cmd_self_update(repo_path: Option<String>, noconfirm: bool) {
     if !cargo_toml.exists() {
         die(&format!(
             "no Cargo.toml found in {} - run this from inside your yapt checkout, \
-             or pass the path: yapt self-update /path/to/yapt",
+             or pass the path: yapt self-update /path/to/your/checkout",
             repo_dir.display()
         ));
     }
