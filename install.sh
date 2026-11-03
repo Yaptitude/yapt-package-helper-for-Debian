@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# just builds buzz and drops it in /usr/local/bin, kinda like makepkg -si
+# just builds yapt and drops it in /usr/local/bin, kinda like makepkg -si
 # does for yay on arch
 #
 # run it with no args to install normally, --user if you dont wanna sudo,
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_NAME="buzz"
+BIN_NAME="yapt"
 SYSTEM_DEST="/usr/local/bin"
 USER_DEST="${HOME}/.local/bin"
 
@@ -68,12 +68,12 @@ if ! command -v cargo >/dev/null 2>&1; then
         # shellcheck disable=SC1090
         source "${HOME}/.cargo/env"
     else
-        die "cargo is required to build buzz. Install Rust and re-run this script."
+        die "cargo is required to build yapt. Install Rust and re-run this script."
     fi
 fi
 
 # 2. Build in release mode.
-log "Building buzz (release) ..."
+log "Building yapt (release) ..."
 ( cd "$SCRIPT_DIR" && cargo build --release )
 
 BUILT_BIN="${SCRIPT_DIR}/target/release/${BIN_NAME}"
@@ -97,4 +97,4 @@ else
     log "Installed to ${DEST}/${BIN_NAME}"
 fi
 
-log "Run 'buzz --help' to get started."
+log "Run 'yapt --help' to get started."
