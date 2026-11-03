@@ -55,6 +55,7 @@ yapt remove nginx --purge     # remove + purge configs (apt only)
 yapt clean                    # wipe the build cache
 yapt list                      # show what yapt has built + installed flatpaks
 yapt self-update               # rebuild + reinstall yapt itself (run from its checkout)
+yapt completions bash          # print a tab-completion script (bash, zsh, fish)
 yapt autoremove                # anything unrecognized passes through to apt-get
 ```
 
@@ -100,6 +101,21 @@ script will warn you if it isn't.)
 ```bash
 ./install.sh --uninstall
 ```
+
+## Tab completion
+
+`install.sh` sets up tab completion for you (bash always, zsh and fish if
+they're installed). Open a new terminal afterwards, then type `yapt ins`
+and press Tab.
+
+If you installed some other way, generate the script yourself:
+
+```bash
+yapt completions bash   # or zsh, or fish
+```
+
+With `./install.sh --user`, zsh needs this line in `~/.zshrc`:
+`fpath=(~/.local/share/zsh/site-functions $fpath)`
 
 ## Project structure
 
