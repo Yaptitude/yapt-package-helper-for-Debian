@@ -46,16 +46,16 @@ fn state_file() -> PathBuf { yapt_home().join("state.json") }
 
 fn use_color() -> bool { io::stdout().is_terminal() }
 
-fn c(code: &str, text: &str) -> String {
+fn paint(code: &str, text: &str) -> String {
     if use_color() { format!("\x1b[{}m{}\x1b[0m", code, text) } else { text.to_string() }
 }
-fn green(t: &str) -> String { c("32;1", t) }
-fn cyan(t: &str) -> String { c("36;1", t) }
-fn red(t: &str) -> String { c("31;1", t) }
-fn yellow(t: &str) -> String { c("33;1", t) }
-fn bold(t: &str) -> String { c("1", t) }
-fn dim(t: &str) -> String { c("2", t) }
-fn magenta(t: &str) -> String { c("35;1", t) } // used for flatpak results in the picker
+fn green(text: &str) -> String { paint("32;1", text) }
+fn cyan(text: &str) -> String { paint("36;1", text) }
+fn red(text: &str) -> String { paint("31;1", text) }
+fn yellow(text: &str) -> String { paint("33;1", text) }
+fn bold(text: &str) -> String { paint("1", text) }
+fn dim(text: &str) -> String { paint("2", text) }
+fn magenta(text: &str) -> String { paint("35;1", text) } // used for flatpak results in the picker
 
 fn log(msg: &str, level: char) {
     // using chars instead of strings here bc i didnt wanna type out
@@ -136,7 +136,7 @@ fn run_capture(cmd: &[&str], cwd: Option<&Path>) -> String {
             cmd.join(" "),
             String::from_utf8_lossy(&output.stderr)
         )),
-        Err(e) => die(&format!("Command not found: {} ({})", cmd[0], e)),
+        Err(error) => die(&format!("Command not found: {} ({})", cmd[0], error)),
     }
 }
 
@@ -164,7 +164,7 @@ fn run(cmd: &[&str], cwd: Option<&Path>, sudo: bool) {
             status.code().unwrap_or(-1),
             full.join(" ")
         )),
-        Err(e) => die(&format!("Command not found: {} ({})", full[0], e)),
+        Err(error) => die(&format!("Command not found: {} ({})", full[0], error)),
     }
 }
 
@@ -204,15 +204,15 @@ fn run_retry(cmd: &[&str], cwd: Option<&Path>, sudo: bool, attempts: u32) {
                 status.code().unwrap_or(-1),
                 full.join(" ")
             )),
-            Err(e) if attempt < attempts => {
+            Err(error) if attempt < attempts => {
                 // command not found isn't going to fix itself by waiting, but
                 // this branch stays generic so a transient spawn failure
                 // (rare, but possible under load) still gets another shot
-                log(&format!("Spawn failed ({}), retrying ...", e), '*');
+                log(&format!("Spawn failed ({}), retrying ...", error), '*');
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 continue;
             }
-            Err(e) => die(&format!("Command not found: {} ({})", full[0], e)),
+            Err(error) => die(&format!("Command not found: {} ({})", full[0], error)),
         }
     }
 }
@@ -250,7 +250,7 @@ enum Json {
 
 impl Json {
     fn as_str(&self) -> Option<&str> {
-        if let Json::Str(s) = self { Some(s.as_str()) } else { None }
+        if let Json::Str(text) = self { Some(text.as_str()) } else { None }
     }
     fn as_arr(&self) -> Option<&Vec<Json>> {
         if let Json::Arr(items) = self { Some(items) } else { None }
@@ -263,9 +263,9 @@ impl Json {
     }
 }
 
-fn json_escape(s: &str) -> String {
+fn json_escape(raw_text: &str) -> String {
     let mut out = String::new();
-    for ch in s.chars() {
+    for ch in raw_text.chars() {
         match ch {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
@@ -281,8 +281,8 @@ fn json_escape(s: &str) -> String {
 fn json_to_string(json_value: &Json, indent: usize) -> String {
     match json_value {
         Json::Null => "null".to_string(),
-        Json::Bool(b) => b.to_string(),
-        Json::Str(s) => format!("\"{}\"", json_escape(s)),
+        Json::Bool(flag) => flag.to_string(),
+        Json::Str(text) => format!("\"{}\"", json_escape(text)),
         Json::Arr(items) => {
             if items.is_empty() {
                 return "[]".to_string();
@@ -487,17 +487,17 @@ fn save_state(state: &State) {
 }
 
 fn state_find<'a>(state: &'a State, name: &str) -> Option<&'a PkgEntry> {
-    state.iter().find(|(n, _)| n == name).map(|(_, e)| e)
+    state.iter().find(|(entry_name, _)| entry_name == name).map(|(_, entry)| entry)
 }
 fn state_upsert(state: &mut State, name: &str, entry: PkgEntry) {
-    if let Some(pos) = state.iter().position(|(n, _)| n == name) {
+    if let Some(pos) = state.iter().position(|(entry_name, _)| entry_name == name) {
         state[pos] = (name.to_string(), entry);
     } else {
         state.push((name.to_string(), entry));
     }
 }
 fn state_remove(state: &mut State, name: &str) {
-    state.retain(|(n, _)| n != name);
+    state.retain(|(entry_name, _)| entry_name != name);
 }
 
 fn get_pkg_version(pkg_dir: &Path) -> Option<String> {
@@ -838,8 +838,8 @@ fn is_apt_installed(name: &str) -> bool {
 // strips out spaces/dashes/underscores/case so "obs-studio", "obs studio",
 // "OBS Studio" and "obsstudio" all compare equal. this is what makes
 // vague/misremembered names still match
-fn normalize(s: &str) -> String {
-    s.to_lowercase().chars().filter(|ch| ch.is_alphanumeric()).collect()
+fn normalize(text: &str) -> String {
+    text.to_lowercase().chars().filter(|ch| ch.is_alphanumeric()).collect()
 }
 
 // when more than one flatpak app matches a vague search, show a quick
@@ -1244,7 +1244,7 @@ fn cmd_interactive(
     let term_lower = term.to_lowercase();
     let tracked_results: Vec<(String, String)> = state
         .iter()
-        .filter(|(n, _)| n.to_lowercase().contains(&term_lower))
+        .filter(|(entry_name, _)| entry_name.to_lowercase().contains(&term_lower))
         .map(|(pkg_name, tracked)| (pkg_name.clone(), tracked.version.clone().unwrap_or_default()))
         .collect();
 
@@ -1293,7 +1293,7 @@ fn cmd_interactive(
     // since flatpak stuff needs to go down a totally different path
     let targets: Vec<(&'static str, String)> =
         picks.iter().map(|&pick| (combined[pick - 1].kind, combined[pick - 1].name.clone())).collect();
-    let names_only: Vec<&str> = targets.iter().map(|(_, n)| n.as_str()).collect();
+    let names_only: Vec<&str> = targets.iter().map(|(_, entry_name)| entry_name.as_str()).collect();
     log(&format!("About to install: {}", names_only.join(", ")), '+');
     if !confirm("Proceed with installation?", true, noconfirm) {
         log("Aborted.", '-');
@@ -1329,7 +1329,7 @@ fn cmd_search_cmd(term: &str) {
     let state = load_state();
     let term_lower = term.to_lowercase();
     let matches: Vec<&(String, PkgEntry)> =
-        state.iter().filter(|(n, _)| n.to_lowercase().contains(&term_lower)).collect();
+        state.iter().filter(|(entry_name, _)| entry_name.to_lowercase().contains(&term_lower)).collect();
     if !matches.is_empty() {
         println!();
         log("Matching yapt-tracked source builds:", '+');
@@ -1396,7 +1396,7 @@ fn cmd_upgrade(noconfirm: bool) {
     }
 
     log("Checking yapt-tracked source packages for new versions ...", '+');
-    let names: Vec<String> = state.iter().map(|(n, _)| n.clone()).collect();
+    let names: Vec<String> = state.iter().map(|(entry_name, _)| entry_name.clone()).collect();
 
     for name in names {
         let entry = match state_find(&state, &name) {
